@@ -6,11 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Farm Visit">
 <meta name="theme-color" content="#1c2a4f">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-k5hZaEHIBEMlTC/QRRqd0CCbENihkGld0sPjCzfVOZ0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://xucdcvkxxlugozwpyllu.supabase.co; worker-src 'self'; manifest-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <title>ProTen Farm Visit</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script src="pdf-lib.min.js"></script>
-<script>window.PDFLib||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"><\/script>')</script>
 <style>
 :root{
   --bg:#f3f4f7; --card:#ffffff; --ink:#1f2430; --muted:#6b7280; --line:#dfe3ea;
@@ -198,6 +199,11 @@ const CHECKS = [
     ["fac2","Office clean and tidy"],
     ["fac3","Smoko room clean and tidy"],
   ]},
+  {id:"grd", title:"Farm ground maintenance", items:[
+    ["grd1","Mowing up to date – grass kept short around sheds and farm"],
+    ["grd2","Weed spraying up to date"],
+    ["grd3","No weeds in gas tank areas"],
+  ]},
   {id:"chem", title:"Chemical storage & farm vehicles", items:[
     ["chem1","Chemicals stored in a locked, bunded, ventilated area away from feed"],
     ["chem2","Chemicals in original, labelled containers"],
@@ -382,7 +388,10 @@ function shedCalc(shed, date){
 }
 function fmt(n,d=0){ return n==null||isNaN(n)?"–":Number(n).toLocaleString("en-AU",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function dAU(s){ if(!s) return ""; const [y,m,d]=s.split("-"); return `${d}/${m}/${y}`; }
+function dAU(s){ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s||"")); return m?`${m[3]}/${m[2]}/${m[1]}`:""; }
+// Only real photo data may be shown or put in a report
+const SAFE_IMG=/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
+function safeImg(d){ return typeof d==="string" && SAFE_IMG.test(d) ? d : ""; }
 
 /* ============================================================
    UI helpers
@@ -436,7 +445,7 @@ function renderVisits(){
     <h2>Visits <span class="spacer"></span><span class="small muted">${list.length}</span></h2>
     ${list.length? list.map(v=>{
       const flags=v.sheds.reduce((n,s)=>n+shedCalc(s,v.visit.date).flags.filter(f=>f[0]==="bad").length,0);
-      return `<div class="visit-item" data-open="${v.id}">
+      return `<div class="visit-item" data-open="${esc(v.id)}">
         <div style="flex:1;min-width:0">
           <div class="t">${esc(v.farm.name||"Unnamed farm")}</div>
           <div class="small muted">${dAU(v.visit.date)} · ${esc(v.visit.purpose)} · ${v.sheds.length} shed${v.sheds.length>1?"s":""}</div>
@@ -446,7 +455,8 @@ function renderVisits(){
       </div>`}).join("") : `<p class="muted small">No visits yet. Your visits are saved ${S.db?"to your Claude account and available on any device":"on this phone"}.</p>`}
   </div>
   ${S.standalone?outboxHtml():""}
-  ${backupCardHtml()}`;
+  ${backupCardHtml()}
+  ${privacyHtml()}`;
   bindVisitsExtras();
   document.getElementById('nv').onclick=()=>{ newVisit(); S.tab="visit"; S.step=0; render(); };
   const rp=document.getElementById('repeat'); if(rp) rp.onchange=()=>{ if(!rp.value) return; newVisit(farms[rp.value]); S.tab="visit"; S.step=0; render(); toast("Farm details copied"); };
@@ -517,7 +527,7 @@ function renderVisit(){
   } else if(S.step===5){
     html+=`<div class="card"><h2>Photos <span class="spacer"></span><span class="small muted">${v.photos.length}</span></h2>
       <label class="btn block" style="margin-bottom:12px">📷 Take / add photos<input type="file" id="ph" accept="image/*" multiple style="display:none"></label>
-      <div class="photos">${v.photos.map((p,i)=>`<div class="photo">${p.data?`<img src="${p.data}">`:`<div class="small muted" style="padding:10px">Photo stored in account</div>`}<button data-delph="${i}">×</button><input data-cap="${i}" value="${esc(p.caption)}" placeholder="Caption"></div>`).join("")}</div>
+      <div class="photos">${v.photos.map((p,i)=>`<div class="photo">${safeImg(p.data)?`<img src="${esc(safeImg(p.data))}" alt="">`:`<div class="small muted" style="padding:10px">Photo stored in account</div>`}<button data-delph="${i}">×</button><input data-cap="${i}" value="${esc(p.caption)}" placeholder="Caption"></div>`).join("")}</div>
       ${v.photos.length?"":`<p class="small muted">Photos are resized and included in the PDF report.</p>`}
     </div>
     <div class="card">
@@ -704,7 +714,7 @@ function renderReport(){
     <div class="small muted">${[esc(v.visit.purpose),esc(v.visit.visitor)].filter(Boolean).join(" · ")} · Checklist ${answered}/${total} answered</div>
     <h4>Summary</h4><div>${esc(v.summary||"—").replace(/\n/g,"<br>")}</div>
     <h4>Actions (${v.actions.length})</h4>
-    ${v.actions.length?`<ol style="padding-left:20px;margin:4px 0">${v.actions.map(a=>`<li><span class="badge ${a.priority==="High"?"bad":a.priority==="Medium"?"warn":""}">${a.priority}</span> ${esc(a.text)} <span class="muted small">${esc(a.who||"")} ${a.due?"by "+dAU(a.due):""}</span></li>`).join("")}</ol>`:"<div class='muted'>None</div>"}
+    ${v.actions.length?`<ol style="padding-left:20px;margin:4px 0">${v.actions.map(a=>`<li><span class="badge ${a.priority==="High"?"bad":a.priority==="Medium"?"warn":""}">${esc(a.priority)}</span> ${esc(a.text)} <span class="muted small">${esc(a.who||"")} ${a.due?"by "+dAU(a.due):""}</span></li>`).join("")}</ol>`:"<div class='muted'>None</div>"}
     <h4>Sheds</h4>
     <div class="tablewrap"><table class="t"><tr><th>Shed</th><th>Age</th><th>Controller</th><th>Litter</th><th>Observations</th></tr>
     ${sum.map(({s,r})=>`<tr><td>${esc(s.no)}</td><td>${r.age??"–"}</td><td>${s.ctrl==="Y"?`<span class="badge sent">Yes</span>`:s.ctrl==="N"?`<span class="badge bad">No</span>`:"–"}${s.ctrlNote?`<div class="small muted">${esc(s.ctrlNote)}</div>`:""}</td><td>${esc(s.litter?s.litter.split(" ")[0]:"–")}</td><td>${esc(s.notes||"")}</td></tr>`).join("")}</table></div>
@@ -718,7 +728,7 @@ function renderReport(){
   const subj=`Farm visit report – ${v.farm.name||""} – ${dAU(v.visit.date)}`;
   const m=document.getElementById('mail');
   m.href=`mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(reportText(v))}`;
-  m.target="_blank";
+  m.target="_blank"; m.rel="noopener noreferrer";
   document.getElementById('copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(subj+"\n\n"+reportText(v)); toast("Report text copied"); }catch(e){ toast("Copy not allowed here – select text in preview"); } };
   document.getElementById('markSent').onclick=()=>{ v.status=v.status==="sent"?"draft":"sent"; if(v.status==="sent") v.sentAt=Date.now(); queueSave(v.id); renderReport(); };
   document.getElementById('pdf').onclick=()=>makePdf(v);
@@ -886,7 +896,7 @@ async function buildPdf(v){
     rows.push([q, rc[r]?{t:r,color:rc[r][0],pill:rc[r][1]}:{t:"-",color:C.muted}, c.note||""]); }); });
   table([{h:"Item",w:60},{h:"Result",w:11,align:"center"},{h:"Comment",w:29}],rows,{size:8.5});
 
-  const photos=v.photos.filter(p=>p.data);
+  const photos=v.photos.filter(p=>safeImg(p.data));
   if(photos.length){
     heading("Photos",220);
     const gap=14, pw=(CW-gap)/2, ph=pw*0.72, capH=24;
@@ -969,6 +979,20 @@ function backupReminderHtml(){
   if(!changed || (lb && daysAgo(lb)<7)) return "";
   return `<div class="callout">💾 <b>Back up your visits.</b> They're saved only on this phone. ${lb?`Last backup ${daysAgo(lb)} days ago.`:"You haven't made a backup yet."}<div style="margin-top:8px"><button class="btn" data-export>Export backup now</button></div></div>`;
 }
+function privacyHtml(){
+  return `<details class="card ref-sec"><summary>🔒 Privacy &amp; security</summary><div class="body small">
+    ${S.standalone?`<ul class="tight">
+      <li><b>Your visits and photos stay on this phone</b>, in this app's own private storage. Nothing is uploaded to GitHub, ProTen or anywhere else.</li>
+      <li><b>Photos</b> are resized when you add them, and their <b>location (GPS) and camera details are removed</b>. Photos taken in the app are not saved to your iPhone's Photos.</li>
+      <li><b>TickOff</b> only receives each action's text, priority, who and due date – never photos, notes or checklists. Keys are kept only on this phone.</li>
+      <li>The <b>PDF report</b> and <b>backups</b> only go where you send or save them. Use a password on backups.</li>
+      <li>The app only runs its own code and can only talk to TickOff – other websites are blocked.</li>
+      <li>Keep a passcode / Face ID on your iPhone – it protects everything saved on the phone.</li></ul>`
+    :`<ul class="tight"><li><b>Your visits and photos are saved privately in your Claude account.</b> Only you can see them – even if you share this page with someone, they can't see your visits.</li>
+      <li>Photos have their location (GPS) and camera details removed when added.</li>
+      <li>The PDF report and backups only go where you send or save them.</li></ul>`}
+  </div></details>`;
+}
 function backupCardHtml(){
   const lb=lastBackup();
   return `<div class="card" id="backupCard"><h2>💾 Backup</h2>
@@ -980,11 +1004,66 @@ function backupCardHtml(){
     <label class="btn sec" style="flex:1">Import backup<input type="file" id="impFile" accept=".json,application/json" style="display:none"></label></div>
   </div>`;
 }
+/* ---- password protection for backup files (AES-256-GCM, key from PBKDF2-SHA-256) ---- */
+const canEncrypt=()=>!!(window.crypto&&crypto.subtle&&window.TextEncoder);
+function toB64(buf){ const u=new Uint8Array(buf); let s=""; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); }
+function fromB64(str){ const s=atob(str); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+async function deriveKey(pw,salt,iter){
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function encryptBackup(text,pw){
+  const salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12)), iter=310000;
+  const key=await deriveKey(pw,salt,iter);
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(text));
+  return JSON.stringify({app:"ProTen Farm Visit",kind:"backup-protected",version:1,kdf:{name:"PBKDF2",hash:"SHA-256",iterations:iter,salt:toB64(salt)},cipher:{name:"AES-GCM",iv:toB64(iv)},data:toB64(ct)});
+}
+async function decryptBackup(obj,pw){
+  const it=obj&&obj.kdf&&obj.kdf.iterations;
+  if(!(it>=100000&&it<=2000000)||!obj.cipher||!obj.data) throw new Error("bad file");
+  const key=await deriveKey(pw,fromB64(obj.kdf.salt),it);
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:fromB64(obj.cipher.iv)},key,fromB64(obj.data));
+  return new TextDecoder().decode(pt);
+}
+// Password box. Resolves to the password, "" (export without one) or null (cancel).
+function askPassword(mode,errText){
+  return new Promise(resolve=>{
+    const bg=document.createElement('div'); bg.className="modal-bg";
+    const exp=mode==="export";
+    bg.innerHTML=`<div class="modal">
+      <h3>${exp?"🔒 Protect your backup":"🔒 Enter the backup password"}</h3>
+      <p class="small muted" style="margin:0 0 10px">${exp
+        ?"The backup has your farm photos and notes. Add a password so only you can open it. You'll need it to bring the backup back – it can't be recovered if you forget it."
+        :"This backup is password-protected. Type the password you chose when you made it."}</p>
+      ${errText?`<div class="callout red" style="margin-bottom:10px">${esc(errText)}</div>`:""}
+      <label class="f"><span>Password</span><input type="password" id="pw1" autocomplete="${exp?"new-password":"current-password"}"></label>
+      ${exp?`<label class="f"><span>Type it again</span><input type="password" id="pw2" autocomplete="new-password"></label>`:""}
+      <div id="pwMsg" class="small" style="color:var(--bad);min-height:18px"></div>
+      <button class="btn block" id="pwOk">${exp?"Export with password":"Open backup"}</button>
+      ${exp?`<button class="btn sec block" id="pwSkip" style="margin-top:8px">Export without password</button>`:""}
+      <button class="btn ghost block" id="pwNo" style="margin-top:4px">Cancel</button></div>`;
+    document.body.appendChild(bg);
+    const p1=bg.querySelector('#pw1'), p2=bg.querySelector('#pw2'), msg=bg.querySelector('#pwMsg');
+    setTimeout(()=>p1.focus(),50);
+    const done=v=>{ bg.remove(); resolve(v); };
+    bg.querySelector('#pwNo').onclick=()=>done(null);
+    const sk=bg.querySelector('#pwSkip'); if(sk) sk.onclick=()=>done("");
+    bg.querySelector('#pwOk').onclick=()=>{
+      const a=p1.value;
+      if(exp){ if(a.length<6){ msg.textContent="Use at least 6 characters."; return; } if(a!==p2.value){ msg.textContent="The two passwords don't match."; return; } }
+      else if(!a){ msg.textContent="Type the password."; return; }
+      done(a);
+    };
+  });
+}
 async function exportBackup(){
+  let pw="";
+  if(canEncrypt()){ pw=await askPassword("export"); if(pw===null) return; }
   const visits=Object.values(S.visits).map(v=>{ const c=JSON.parse(JSON.stringify(v)); delete c._synced; (c.photos||[]).forEach(p=>{ delete p.synced; delete p.capSynced; }); return c; });
   const missing=visits.reduce((n,v)=>n+(v.photos||[]).filter(p=>!p.data).length,0);
-  const data=JSON.stringify({app:"ProTen Farm Visit",kind:"backup",version:1,exported:new Date().toISOString(),visits},null,0);
-  const name=`ProTen-visits-backup-${today()}.json`;
+  let data=JSON.stringify({app:"ProTen Farm Visit",kind:"backup",version:1,exported:new Date().toISOString(),visits},null,0);
+  if(pw){ toast("Locking the backup…"); data=await encryptBackup(data,pw); }
+  const name=`ProTen-visits-backup-${today()}${pw?"-protected":""}.json`;
   let ok=false;
   if(S.dl){
     try{ await S.dl.save({filename:name,data}); ok=true; }
@@ -992,24 +1071,59 @@ async function exportBackup(){
   } else {
     ok=await shareFile(new Blob([data],{type:"application/json"}),name,"application/json","Your backup is ready");
   }
-  if(ok){ lsSet("proten.lastBackup",Date.now()); toast(`Backup of ${visits.length} visit${visits.length===1?"":"s"} ready – save it to Files`+(missing?` (${missing} photo${missing>1?"s":""} not loaded)`:"")); if(S.tab==="visits") renderVisits(); }
+  if(ok){ lsSet("proten.lastBackup",Date.now()); toast(`${pw?"Password-protected b":"B"}ackup of ${visits.length} visit${visits.length===1?"":"s"} ready – save it to Files`+(missing?` (${missing} photo${missing>1?"s":""} not loaded)`:"")); if(S.tab==="visits") renderVisits(); }
+}
+/* ---- clean every imported visit: only known fields, right types, real photos ---- */
+const DATE_RE=/^\d{4}-\d{2}-\d{2}$/, TIME_RE=/^\d{2}:\d{2}$/;
+function str(x,max=4000){ return typeof x==="string"?x.slice(0,max):(typeof x==="number"?String(x):""); }
+function pick(x,allowed,def){ return allowed.includes(x)?x:def; }
+function cleanVisit(v){
+  if(!v||typeof v!=="object") return null;
+  const id=str(v.id,40); if(!/^[a-z0-9]{6,40}$/i.test(id)) return null;
+  const f=v.farm||{}, vi=v.visit||{};
+  const out={ id, kind:"visit", status:pick(v.status,["draft","sent"],"draft"),
+    created:+v.created||Date.now(), updated:+v.updated||Date.now(), completed:+v.completed||undefined, sentAt:+v.sentAt||undefined,
+    farm:{name:str(f.name,200),grower:str(f.grower,200),integrator:str(f.integrator,200),state:pick(f.state,["QLD","NSW","VIC","SA","WA","TAS","NT","ACT"],"QLD")},
+    visit:{date:DATE_RE.test(vi.date)?vi.date:today(),timeIn:TIME_RE.test(vi.timeIn)?vi.timeIn:"",timeOut:TIME_RE.test(vi.timeOut)?vi.timeOut:"",
+      visitor:str(vi.visitor,200),company:str(vi.company,200),purpose:pick(vi.purpose,PURPOSES,PURPOSES[0])},
+    water:{cl:str((v.water||{}).cl,20),clo2:str((v.water||{}).clo2,20),ph:str((v.water||{}).ph,20)},
+    sheds:(Array.isArray(v.sheds)?v.sheds:[]).slice(0,60).map((s,i)=>newShed(i+1,{ no:str(s&&s.no,20)||String(i+1),
+      placeDate:DATE_RE.test(s&&s.placeDate)?s.placeDate:"", litter:pick(s&&s.litter,["",...LITTER],""),
+      ctrl:pick(s&&s.ctrl,["","Y","N"],""), ctrlNote:str(s&&s.ctrlNote), notes:str(s&&s.notes) })),
+    checks:{}, actions:[], summary:str(v.summary,20000), nextVisit:DATE_RE.test(v.nextVisit)?v.nextVisit:"",
+    photos:[], signature:{name:"",data:""} };
+  if(!out.sheds.length) out.sheds=[newShed(1)];
+  const ids=new Set(CHECKS.flatMap(c=>c.items.map(x=>x[0])));
+  Object.entries(v.checks||{}).forEach(([k,c])=>{ if(ids.has(k)&&c&&typeof c==="object") out.checks[k]={v:pick(c.v,["","Y","N","NA"],""),note:str(c.note,1000)}; });
+  (Array.isArray(v.actions)?v.actions:[]).slice(0,200).forEach(a=>{ if(a&&typeof a==="object") out.actions.push({text:str(a.text,2000),priority:pick(a.priority,["High","Medium","Low"],"Medium"),who:str(a.who,200),due:DATE_RE.test(a.due)?a.due:""}); });
+  (Array.isArray(v.photos)?v.photos:[]).slice(0,100).forEach(p=>{ const d=safeImg(p&&p.data); if(d&&d.length<4e6) out.photos.push({id:/^[a-z0-9]{4,40}$/i.test(p.id)?p.id:uid(),data:d,caption:str(p.caption,300)}); });
+  return out;
 }
 async function importBackup(file){
+  if(file.size>300*1024*1024){ toast("That file is too big to be a ProTen backup"); return; }
   let data; try{ data=JSON.parse(await file.text()); }catch(e){ toast("That file isn't a ProTen backup"); return; }
+  if(data&&data.kind==="backup-protected"){
+    if(!canEncrypt()){ toast("This phone can't open password-protected backups"); return; }
+    let err="";
+    for(;;){
+      const pw=await askPassword("import",err); if(pw===null) return;
+      try{ data=JSON.parse(await decryptBackup(data,pw)); break; }
+      catch(e){ err="That password didn't open the backup. Check it and try again."; }
+    }
+  }
   const list=Array.isArray(data)?data:(data&&Array.isArray(data.visits)?data.visits:null);
   if(!list){ toast("That file isn't a ProTen backup"); return; }
-  let added=0, updated=0;
-  for(const v of list){
-    if(!v||!v.id||!v.farm||!v.visit||!Array.isArray(v.sheds)) continue;
+  let added=0, updated=0, skipped=0;
+  for(const raw of list){
+    const v=cleanVisit(raw); if(!v){ skipped++; continue; }
     const have=S.visits[v.id];
     if(have && (have.updated||0)>=(v.updated||0)) continue;
-    v.checks=v.checks||{}; v.actions=v.actions||[]; v.photos=(v.photos||[]).filter(p=>p&&p.data);
     if(S.db){ v._synced=false; v.photos.forEach(p=>{ p.synced=false; }); }
     S.visits[v.id]=v; S.dirty.add(v.id); if(S.db) queueSave(v.id);
     have?updated++:added++;
   }
   persistLocal(); await flushNow();
-  toast(added||updated?`Brought in ${added} new visit${added===1?"":"s"}${updated?` and updated ${updated}`:""}`:"Nothing new in that backup");
+  toast(added||updated?`Brought in ${added} new visit${added===1?"":"s"}${updated?` and updated ${updated}`:""}${skipped?` (${skipped} unreadable skipped)`:""}`:"Nothing new in that backup");
   render();
 }
 function bindVisitsExtras(){
@@ -1262,7 +1376,7 @@ function renderRef(){
   <p class="small muted" style="text-align:center">General guidance only. Follow the integrator's vet, your state's regulations and accreditation-scheme rules.</p>`;
   const q=document.getElementById('rq');
   q.oninput=()=>{ const s=q.value.trim().toLowerCase(); main.querySelectorAll('[data-ref]').forEach(d=>{ const hit=!s||d.textContent.toLowerCase().includes(s); d.classList.toggle('hide',!hit); if(s&&hit) d.open=true; }); };
-  main.querySelectorAll('.ref-sec a[href^="http"]').forEach(a=>a.target="_blank");
+  main.querySelectorAll('.ref-sec a[href^="http"]').forEach(a=>{ a.target="_blank"; a.rel="noopener noreferrer"; });
 }
 
 /* ============================================================

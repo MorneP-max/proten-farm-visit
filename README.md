@@ -10,6 +10,17 @@ If the farm has a TickOff key, the visit's actions also go to that farm's TickOf
 - **TickOff keys:** only on the phone, one per farm. They are never in this code, the reports or the backups.
 - **This repository:** only the app itself. No farm data, no keys.
 
+## Privacy & security
+- **Photos and visits never leave the phone** unless you send the PDF or save a backup. They are not in this repository.
+- **Photo location removed:** when a photo is added, it is redrawn and resized, which strips its GPS location and camera details.
+- **Locked-down app:** a Content Security Policy in `index.html` lets the app run only its own code (no outside scripts) and
+  only connect to TickOff. Anything else is blocked by the phone's browser.
+- **TickOff** receives only each action's text, priority, responsible person and due date – never photos, notes or checklists.
+- **Backups** can be password-protected (AES-256 encryption). Without the password the file can't be read – or restored.
+- **Imported backups are checked:** only known fields and real photos are accepted; anything else is dropped.
+- **Keep the GitHub account safe:** whoever can change this repository can change the app. Turn on two-factor authentication.
+- When you change `index.html`, rebuild it with the same tool (the security policy includes a fingerprint of the app's code).
+
 ## Files
 | File | What it is |
 |---|---|

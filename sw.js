@@ -1,6 +1,6 @@
 // ProTen Farm Visit – lets the app open with no signal.
 // When you upload a new index.html, also change the number below (v1 -> v2) so phones pick it up.
-const CACHE = "proten-farm-visit-v4";
+const CACHE = "proten-farm-visit-v7";
 const FILES = ["./", "./index.html", "./pdf-lib.min.js", "./manifest.webmanifest",
                "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
