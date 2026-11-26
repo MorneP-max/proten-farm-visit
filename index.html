@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-title" content="Farm Visit">
 <meta name="theme-color" content="#1c2a4f">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-k5hZaEHIBEMlTC/QRRqd0CCbENihkGld0sPjCzfVOZ0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://xucdcvkxxlugozwpyllu.supabase.co; worker-src 'self'; manifest-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-hXwsOpBOkOkAM9SScVStSIN8QKQ5mun9GtXx69pyj5c='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://xucdcvkxxlugozwpyllu.supabase.co; worker-src 'self'; manifest-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <title>ProTen Farm Visit</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -352,13 +352,13 @@ async function removeVisitRemote(v){
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function today(){const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function nowTime(){const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
-function newShed(n, base){ return Object.assign({no:String(n), placeDate:"", breed:"Ross 308", sex:"Mixed", placed:"", area:"", vent:"Tunnel", mort:"", culls:"", weight:"", uniformity:"", water:"", feed:"", tmin:"", tmax:"", rh:"", nh3:"", co2:"", litter:"", footpad:"", lux:"", dark:"", notes:""}, base||{}); }
+function newShed(n, base){ return Object.assign({no:String(n), age:"", placeDate:"", breed:"Ross 308", sex:"Mixed", placed:"", area:"", vent:"Tunnel", mort:"", culls:"", weight:"", uniformity:"", water:"", feed:"", tmin:"", tmax:"", rh:"", nh3:"", co2:"", litter:"", footpad:"", lux:"", dark:"", notes:""}, base||{}); }
 function newVisit(from){
   const id=uid();
   const v={ id, kind:"visit", status:"draft", created:Date.now(), updated:Date.now(),
     farm: from? {...from.farm} : {name:"",grower:"",address:"",pic:"",integrator:"",email:"",cc:"",phone:"",state:"QLD"},
     visit:{date:today(),timeIn:nowTime(),timeOut:"",visitor:lsGet("broilerVisits.me")?.visitor||"",company:lsGet("broilerVisits.me")?.company||"",purpose:PURPOSES[0],lastFarm:"",lastDate:"",batch:""},
-    sheds: from? from.sheds.map(s=>newShed(s.no,{placeDate:s.placeDate,breed:s.breed,sex:s.sex,placed:s.placed,area:s.area,vent:s.vent})) : [newShed(1)],
+    sheds: from? from.sheds.map(s=>newShed(s.no,{breed:s.breed,sex:s.sex,placed:s.placed,area:s.area,vent:s.vent})) : [newShed(1)],
     water:{cl:"",clo2:"",ph:""}, checks:{}, actions:[], summary:"", nextVisit:"", photos:[], signature:{name:"",data:""}
   };
   S.visits[id]=v; S.currentId=id; queueSave(id); return v;
@@ -367,6 +367,8 @@ function cur(){ return S.visits[S.currentId]||null; }
 
 function num(x){ const n=parseFloat(x); return isNaN(n)?null:n; }
 function ageOf(shed, date){
+  const typed=String(shed.age??"").trim();
+  if(typed!==""){ const n=parseInt(typed,10); return isNaN(n)?null:n; }
   if(!shed.placeDate||!date) return null;
   const a=new Date(date+"T00:00:00"), b=new Date(shed.placeDate+"T00:00:00");
   return Math.round((a-b)/86400000);
@@ -491,7 +493,6 @@ function renderVisit(){
     </div>`;
   } else if(S.step===2){
     html+=`<div class="card"><h2>Sheds <span class="spacer"></span><button class="btn sec" id="addShed">+ Shed</button></h2>
-    <p class="small muted" style="margin-top:-4px">Bird age is worked out from the placement date and the visit date.</p>
     ${v.sheds.map((s,i)=>shedHtml(s,i)).join("")}
     <button class="btn sec block" id="addShed2">+ Add shed</button></div>`;
   } else if(S.step===3){
@@ -553,7 +554,7 @@ function shedHtml(s,i){
       ${v.sheds.length>1?`<button class="btn danger small" data-delshed="${i}">Remove</button>`:""}</div>
     <div class="calc">
     ${r.flags.map(f=>`<span class="flag ${f[0]}">${f[0]==="bad"?"⛔":"⚠️"} ${esc(f[1])}</span>`).join("")}</div>
-    ${field("Placement date (for bird age)",p+"placeDate",{type:"date"})}
+    ${field("Bird age (days)",p+"age",{type:"number",inputmode:"numeric",ph:"e.g. 28"})}
     <h3>Controller settings</h3>
     <div class="chk" style="border:0;padding-top:0"><div class="q">Controller settings checked and correct</div>
       <div class="seg" data-ctrl="${i}"><button class="y ${s.ctrl==="Y"?"on":""}" data-v="Y">Yes</button><button class="n ${s.ctrl==="N"?"on":""}" data-v="N">No</button></div>
@@ -595,7 +596,7 @@ function bindVisit(){
       if(el.dataset.path==="farm.name"){ document.getElementById('title').textContent=v.farm.name||"New visit"; const tk=document.getElementById('tkcard'); if(tk){ tk.innerHTML=tickoffCardHtml(v); bindTickoffCard(v); } }
     });
   });
-  const add=()=>{ const last=v.sheds[v.sheds.length-1]; v.sheds.push(newShed((parseInt(last?.no)||v.sheds.length)+1,last?{placeDate:last.placeDate,breed:last.breed,sex:last.sex,vent:last.vent,area:last.area}:{})); queueSave(v.id); renderVisit(); main.querySelector(`[data-shed="${v.sheds.length-1}"]`)?.scrollIntoView({behavior:"smooth"}); };
+  const add=()=>{ const last=v.sheds[v.sheds.length-1]; v.sheds.push(newShed((parseInt(last?.no)||v.sheds.length)+1,last?{age:last.age,breed:last.breed,sex:last.sex,vent:last.vent,area:last.area}:{})); queueSave(v.id); renderVisit(); main.querySelector(`[data-shed="${v.sheds.length-1}"]`)?.scrollIntoView({behavior:"smooth"}); };
   ["addShed","addShed2"].forEach(id=>{ const b=document.getElementById(id); if(b) b.onclick=add; });
   main.querySelectorAll('[data-ctrl]').forEach(seg=>seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{
     const i=+seg.dataset.ctrl, sh=v.sheds[i]; sh.ctrl = sh.ctrl===b.dataset.v ? "" : b.dataset.v;
@@ -1088,7 +1089,7 @@ function cleanVisit(v){
       visitor:str(vi.visitor,200),company:str(vi.company,200),purpose:pick(vi.purpose,PURPOSES,PURPOSES[0])},
     water:{cl:str((v.water||{}).cl,20),clo2:str((v.water||{}).clo2,20),ph:str((v.water||{}).ph,20)},
     sheds:(Array.isArray(v.sheds)?v.sheds:[]).slice(0,60).map((s,i)=>newShed(i+1,{ no:str(s&&s.no,20)||String(i+1),
-      placeDate:DATE_RE.test(s&&s.placeDate)?s.placeDate:"", litter:pick(s&&s.litter,["",...LITTER],""),
+      age:/^\d{1,3}$/.test(str(s&&s.age,3))?str(s.age,3):"", placeDate:DATE_RE.test(s&&s.placeDate)?s.placeDate:"", litter:pick(s&&s.litter,["",...LITTER],""),
       ctrl:pick(s&&s.ctrl,["","Y","N"],""), ctrlNote:str(s&&s.ctrlNote), notes:str(s&&s.notes) })),
     checks:{}, actions:[], summary:str(v.summary,20000), nextVisit:DATE_RE.test(v.nextVisit)?v.nextVisit:"",
     photos:[], signature:{name:"",data:""} };
